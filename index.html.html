@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sand Casting Gating System — Interactive</title>
+<style>
+  :root{
+    --mold:#9e8f7c;
+    --sand:#c5b6a3;
+    --channel:#6b5f52;
+    --metal:#ff8a00;
+    --highlight:#32a1ff;
+    --good:#2ecc71;
+    --bad:#e74c3c;
+    --label:#1f2937;
+    --bg:#f7f6f3;
+    --panel:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:#111;
+    line-height:1.35;
+  }
+  header{
+    padding:16px 20px; background:linear-gradient(90deg,#0f62fe,#5e5ee6);
+    color:#fff;
+  }
+  header h1{margin:0; font-size:20px; font-weight:600}
+  header p{margin:6px 0 0; opacity:.9}
+  .app{
+    display:grid; grid-template-columns: 1fr 320px; gap:16px; padding:16px; max-width:1200px; margin:0 auto;
+  }
+  .stage{
+    background:var(--panel); border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,.08);
+    padding:12px; position:relative; overflow:hidden;
+  }
+  .panel{
+    background:var(--panel); border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,.08);
+    padding:16px; display:flex; flex-direction:column; gap:12px;
+  }
+  .controls{display:flex; gap:8px; flex-wrap:wrap}
+  button{
+    appearance:none; border:1px solid #d0d7de; background:#fff; color:#111; padding:8px 12px;
+    border-radius:8px; cursor:pointer; font-weight:600;
+  }
+  button:disabled{opacity:.6; cursor:not-allowed}
+  button.primary{background:#0f62fe; color:#fff; border-color:#0f62fe}
+  button.ghost{background:#fff}
+  .legend{display:grid; grid-template-columns: 1fr 1fr; gap:8px}
+  .legend button{justify-content:flex-start; display:flex; align-items:center; gap:8px; font-weight:600}
+  .swatch{width:10px; height:10px; border-radius:2px; background:var(--channel); box-shadow:inset 0 0 0 2px rgba(0,0,0,.08)}
+  .info{
+    background:#f3f4f6; border:1px dashed #d1d5db; padding:10px; border-radius:8px; color:#374151; min-height:52px;
+  }
+  .tip{font-size:12px; color:#6b7280}
+  .tooltip{
+    position:absolute; pointer-events:none; background:#111; color:#fff; font-size:12px;
+    padding:8px 10px; border-radius:8px; transform:translate(-50%, -120%); white-space:nowrap; opacity:0; transition:.12s;
+  }
+  .tooltip.visible{opacity:1}
+  svg{width:100%; height:auto; display:block}
+  .mold{fill:var(--sand); stroke:#7b6f61; stroke-width:2}
+  .cavity-outline{fill:#f1efe9; stroke:#b7ac9e; stroke-width:2}
+  .channel{fill:var(--channel)}
+  .metal-flow{fill:none; stroke:var(--metal); stroke-width:10; stroke-linecap:round; stroke-linejoin:round; opacity:.95}
+  .flow-init{stroke-dasharray:1; stroke-dashoffset:1}
+  @keyframes draw {
+    to { stroke-dashoffset:0; }
+  }
+  .label{font-size:12px; fill:var(--label); user-select:none}
+  .part:hover .outline,
+  .part.active .outline{stroke:var(--highlight); stroke-width:3; filter:drop-shadow(0 0 4px rgba(50,161,255,.5))}
+  .outline{stroke:#333; stroke-width:1.5; fill-opacity:0}
+  .target{stroke:var(--highlight); stroke-dasharray:6 4}
+  .good{outline: 0; box-shadow:0 0 0 3px rgba(46,204,113,.4) inset}
+  .bad{outline: 0; box-shadow:0 0 0 3px rgba(231,76,60,.4) inset}
+  .hidden{display:none}
+  .quiz-labels .label{opacity:0}
+  .riser{fill:#8f7f6f}
+  .core{fill:#d9c7a3; stroke:#a38c63; stroke-width:1.5}
+  .vent{stroke:#4b5563; stroke-width:2; stroke-dasharray:3 3}
+  .gate{fill:var(--channel)}
+  .gate-outline{stroke:#333; stroke-width:1.5; fill-opacity:0}
+  .cavity-fill{fill:rgba(255,138,0,.18)}
+  .keyline{stroke:#7b6f61; stroke-width:1; fill:none}
+  .footnote{font-size:11px; color:#6b7280}
+  @media (max-width: 960px){
+    .app{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sand Casting — Gating System Interactive</h1>
+  <p>Explore each part, simulate metal flow, and test yourself with Quiz mode.</p>
+</header>
+
+<main class="app">
+  <section class="stage" id="stage">
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip"></div>
+
+    <!-- SVG Scene -->
+    <svg viewBox="0 0 960 560" aria-labelledby="title desc" role="img">
+      <title id="title">Sand casting gating system cross-section</title>
+      <desc id="desc">An educational diagram of pouring basin, sprue, runner, gates, cavity with core, riser, and vents.</desc>
+
+      <!-- Mold block -->
+      <rect x="40" y="60" width="880" height="440" rx="18" class="mold"></rect>
+      <rect x="40" y="60" width="880" height="440" class="keyline" opacity=".25"></rect>
+
+      <!-- Pouring basin + sprue (left) -->
+      <g id="pouringBasin" class="part" data-name="Pouring Basin"
+         data-desc="A funnel-shaped cup that receives the molten metal and calms the stream to reduce turbulence.">
+        <!-- Basin -->
+        <path d="M120,80 L240,80 L220,130 L140,130 Z" fill="#7c6d5d"></path>
+        <rect x="140" y="130" width="80" height="8" fill="#6b5f52"></rect>
+        <rect x="170" y="138" width="20" height="10" fill="#6b5f52"></rect>
+        <!-- Sprue (vertical channel down) -->
+        <g id="sprue" class="part" data-name="Sprue"
+           data-desc="A vertical channel that carries metal downward from the pouring basin. A smooth sprue reduces aspiration.">
+          <rect x="170" y="148" width="20" height="220" class="channel"></rect>
+          <rect x="170" y="148" width="20" height="220" class="outline"></rect>
+          <text class="label" x="130" y="260">Sprue</text>
+        </g>
+        <rect x="120" y="80" width="120" height="60" class="outline"></rect>
+        <text class="label" x="88" y="72">Pouring Basin</text>
+      </g>
+
+      <!-- Runner (bottom horizontal) -->
+      <g id="runner" class="part" data-name="Runner"
+         data-desc="A horizontal channel that distributes metal from the sprue to the gates feeding the cavity.">
+        <!-- Sprue well -->
+        <rect x="160" y="360" width="40" height="16" class="channel" opacity=".75"></rect>
+        <!-- Runner -->
+        <rect x="140" y="376" width="500" height="16" class="channel"></rect>
+        <rect x="140" y="360" width="520" height="32" class="outline"></rect>
+        <text class="label" x="360" y="352">Runner</text>
+      </g>
+
+      <!-- Gates (short branches up from runner) -->
+      <g id="gateLeft" class="part" data-name="Gate"
+         data-desc="A short channel connecting the runner to the mold cavity. Controls flow and reduces turbulence.">
+        <rect x="260" y="340" width="14" height="36" class="gate"></rect>
+        <rect x="260" y="340" width="14" height="36" class="gate-outline"></rect>
+      </g>
+      <g id="gateRight" class="part" data-name="Gate"
+         data-desc="A short channel connecting the runner to the mold cavity. Multiple gates help fill evenly.">
+        <rect x="470" y="340" width="14" height="36" class="gate"></rect>
+        <rect x="470" y="340" width="14" height="36" class="gate-outline"></rect>
+        <text class="label" x="492" y="356">Gates</text>
+      </g>
+
+      <!-- Mold cavity (simple rectangle) -->
+      <g id="cavity" class="part" data-name="Mold Cavity"
+         data-desc="The hollow shape of the final casting inside the sand mold.">
+        <rect x="220" y="260" width="340" height="80" class="cavity-outline"></rect>
+        <text class="label" x="330" y="248">Mold Cavity</text>
+        <!-- Core inside cavity -->
+        <g id="core" class="part" data-name="Core"
+           data-desc="A sand insert that creates internal passages or hollow regions in the casting.">
+          <circle cx="390" cy="300" r="20" class="core"></circle>
+          <circle cx="390" cy="300" r="22" class="outline"></circle>
+          <text class="label" x="362" y="292">Core</text>
+        </g>
+      </g>
+
+      <!-- Riser (right reservoir) -->
+      <g id="riser" class="part" data-name="Riser"
+         data-desc="A reservoir that feeds molten metal to the casting as it shrinks during solidification, preventing voids.">
+        <!-- Neck from cavity to riser -->
+        <rect x="560" y="280" width="24" height="20" class="channel"></rect>
+        <!-- Riser body -->
+        <rect x="584" y="240" width="60" height="100" class="riser"></rect>
+        <rect x="560" y="240" width="84" height="100" class="outline"></rect>
+        <text class="label" x="590" y="228">Riser</text>
+      </g>
+
+      <!-- Vents (thin lines up) -->
+      <g id="vents" class="part" data-name="Vents"
+         data-desc="Small passages that allow gases and air to escape from the mold during pouring and solidification.">
+        <line x1="260" y1="260" x2="260" y2="110" class="vent"></line>
+        <line x1="390" y1="260" x2="390" y2="110" class="vent"></line>
+        <line x1="500" y1="260" x2="500" y2="110" class="vent"></line>
+        <rect x="240" y="100" width="280" height="20" fill="none" class="outline"></rect>
+        <text class="label" x="250" y="96">Vents</text>
+      </g>
+
+      <!-- Guides for labels (top line) -->
+      <line x1="40" y1="120" x2="920" y2="120" class="keyline" opacity=".2"></line>
+
+      <!-- FLOW PATHS (animated stroke) -->
+      <path id="flowBasin" class="metal-flow flow-init" d="M180,95 C190,95 200,100 210,115"></path>
+      <path id="flowSprue" class="metal-flow flow-init" d="M180,150 L180,360"></path>
+      <path id="flowRunner" class="metal-flow flow-init" d="M150,384 L630,384"></path>
+      <path id="flowGate1" class="metal-flow flow-init" d="M267,345 L267,332"></path>
+      <path id="flowGate2" class="metal-flow flow-init" d="M477,345 L477,332"></path>
+      <path id="flowCavity" class="metal-flow flow-init" d="M230,300 L550,300"></path>
+      <path id="flowRiser" class="metal-flow flow-init" d="M572,290 L612,290 L612,255"></path>
+
+      <!-- Cavity fill overlay -->
+      <clipPath id="clipCavity"><rect x="220" y="260" width="340" height="80" rx="0"></rect></clipPath>
+      <rect id="fillRect" x="220" y="340" width="340" height="0" class="cavity-fill" clip-path="url(#clipCavity)"></rect>
+    </svg>
+  </section>
+
+  <aside class="panel">
+    <div class="controls">
+      <button id="pourBtn" class="primary">Pour metal</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+      <button id="quizBtn" class="ghost">Quiz mode</button>
+    </div>
+
+    <div class="info" id="infoBox">Hover a part to learn what it does.</div>
+
+    <div class="legend" id="legend">
+      <button data-target="pouringBasin"><span class="swatch" style="background:#7c6d5d"></span> Pouring Basin</button>
+      <button data-target="sprue"><span class="swatch"></span> Sprue</button>
+      <button data-target="runner"><span class="swatch"></span> Runner</button>
+      <button data-target="gateLeft"><span class="swatch"></span> Gates</button>
+      <button data-target="cavity"><span class="swatch" style="background:#f1efe9"></span> Mold Cavity</button>
+      <button data-target="core"><span class="swatch" style="background:#d9c7a3"></span> Core</button>
+      <button data-target="riser"><span class="swatch" style="background:#8f7f6f"></span> Riser</button>
+      <button data-target="vents"><span class="swatch" style="background:#4b5563"></span> Vents</button>
+    </div>
+
+    <div class="tip">
+      • The riser should stay liquid longer than the casting so it can feed shrinkage.
+      <br/>
+      • Smooth flow paths reduce turbulence and gas entrapment.
+    </div>
+    <div class="footnote">Made for learning: edit colors, shapes, or labels as you like.</div>
+  </aside>
+</main>
+
+<script>
+(function(){
+  const stage = document.getElementById('stage');
+  const tooltip = document.getElementById('tooltip');
+  const infoBox = document.getElementById('infoBox');
+  const pourBtn = document.getElementById('pourBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const quizBtn = document.getElementById('quizBtn');
+  const legend = document.getElementById('legend');
+
+  const parts = Array.from(document.querySelectorAll('.part'));
+  const labels = Array.from(document.querySelectorAll('.label'));
+  const flowPaths = [
+    { id:'flowBasin', dur:500 },
+    { id:'flowSprue', dur:900 },
+    { id:'flowRunner', dur:900 },
+    { id:'flowGate1', dur:400 },
+    { id:'flowGate2', dur:400 },
+    { id:'flowCavity', dur:900 },
+    { id:'flowRiser', dur:700 }
+  ];
+  const fillRect = document.getElementById('fillRect');
+
+  let quizMode = false;
+  let quizTarget = null;
+
+  function setInfo(text){ infoBox.textContent = text; }
+
+  function showTooltip(evt, name, desc){
+    tooltip.innerHTML = '<strong style="font-weight:700">'+name+':</strong> '+desc;
+    tooltip.style.left = evt.clientX + 'px';
+    tooltip.style.top = evt.clientY + 'px';
+    tooltip.classList.add('visible');
+  }
+  function hideTooltip(){ tooltip.classList.remove('visible'); }
+
+  function clearActive(){
+    parts.forEach(p=>p.classList.remove('active'));
+    infoBox.classList.remove('good','bad');
+  }
+
+  function activateById(id){
+    clearActive();
+    const el = document.getElementById(id);
+    if(el){ el.classList.add('active'); scrollIntoViewIfNeeded(el); }
+    const name = el?.dataset.name || id;
+    const desc = el?.dataset.desc || '';
+    if(desc) setInfo(name+': '+desc);
+  }
+
+  function scrollIntoViewIfNeeded(el){
+    // No-op for SVG elements; kept for completeness
+  }
+
+  // Hover interactions
+  parts.forEach(part=>{
+    part.addEventListener('mousemove', (e)=>{
+      if(quizMode) return; // tooltip off in quiz
+      const { name, desc } = part.dataset;
+      if(name && desc) showTooltip(e, name, desc);
+    });
+    part.addEventListener('mouseleave', hideTooltip);
+    part.addEventListener('click', ()=>{
+      if(quizMode){
+        // Quiz check
+        const id = part.id || part.closest('.part')?.id;
+        if(!quizTarget) return;
+        if(id === quizTarget.id){
+          infoBox.classList.add('good'); infoBox.classList.remove('bad');
+          setInfo('Correct! That is the '+quizTarget.dataset.name+'. Click Quiz mode again for a new one.');
+          part.classList.add('active');
+          quizTarget = null;
+        } else {
+          infoBox.classList.add('bad'); infoBox.classList.remove('good');
+          setInfo('Not quite. Try again — find the '+(quizTarget?.dataset.name || 'target')+'.');
+          blink(part);
+        }
+        return;
+      }
+      const id = part.id || part.closest('.part')?.id;
+      activateById(id);
+    });
+  });
+
+  // Legend clicks
+  legend.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-target]');
+    if(!btn) return;
+    activateById(btn.dataset.target);
+  });
+
+  // Flow preparation: set dash arrays based on path length
+  function prepFlow(){
+    flowPaths.forEach(f=>{
+      const path = document.getElementById(f.id);
+      if(!path) return;
+      const len = path.getTotalLength ? path.getTotalLength() : 600;
+      path.style.strokeDasharray = len;
+      path.style.strokeDashoffset = len;
+      path.classList.add('flow-init');
+      path.style.animation = 'none';
+    });
+    // empty cavity fill
+    fillRect.setAttribute('y', 340);
+    fillRect.setAttribute('height', 0);
+  }
+  prepFlow();
+
+  function animateFlowSequence(){
+    let t = 0;
+    flowPaths.forEach((f, idx)=>{
+      const path = document.getElementById(f.id);
+      setTimeout(()=>{
+        const len = path.getTotalLength ? path.getTotalLength() : 600;
+        path.style.strokeDasharray = len;
+        path.style.strokeDashoffset = len;
+        path.style.animation = `draw ${f.dur}ms linear forwards`;
+        path.classList.remove('flow-init');
+        // start cavity fill when cavity path animates
+        if(f.id === 'flowCavity'){
+          animateFill(f.dur + 400);
+        }
+      }, t);
+      t += f.dur + 150;
+    });
+  }
+
+  function animateFill(total=1200){
+    const start = performance.now();
+    function frame(now){
+      const p = Math.min(1, (now - start)/total);
+      const targetTop = 260; // top of cavity
+      const bottom = 340; // bottom of cavity
+      const y = bottom - (bottom - targetTop)*p;
+      const h = Math.max(0, 340 - y);
+      fillRect.setAttribute('y', y);
+      fillRect.setAttribute('height', h);
+      if(p < 1){ requestAnimationFrame(frame); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  pourBtn.addEventListener('click', ()=>{
+    pourBtn.disabled = true;
+    animateFlowSequence();
+    setInfo('Molten metal flows basin → sprue → runner → gates → cavity → riser.');
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    pourBtn.disabled = false;
+    clearActive();
+    prepFlow();
+    setInfo('Hover a part to learn what it does.');
+  });
+
+  quizBtn.addEventListener('click', ()=>{
+    quizMode = !quizMode;
+    stage.classList.toggle('quiz-labels', quizMode);
+    labels.forEach(l=> l.style.opacity = quizMode ? 0 : 1);
+    if(quizMode){
+      // pick a random part that's visible and meaningful
+      const candidates = ['pouringBasin','sprue','runner','gateLeft','cavity','core','riser','vents']
+        .map(id=>document.getElementById(id))
+        .filter(Boolean);
+      quizTarget = candidates[Math.floor(Math.random()*candidates.length)];
+      clearActive();
+      hideTooltip();
+      setInfo('Quiz: Click the '+quizTarget.dataset.name+'.');
+    } else {
+      quizTarget = null;
+      infoBox.classList.remove('good','bad');
+      setInfo('Hover a part to learn what it does.');
+    }
+  });
+
+  function blink(el){
+    el.classList.add('target');
+    setTimeout(()=>el.classList.remove('target'), 500);
+  }
+
+  // Accessibility: keyboard focus via legend
+  Array.from(legend.querySelectorAll('button')).forEach(btn=>{
+    btn.addEventListener('keydown',(e)=>{
+      if(e.key === 'Enter' || e.key === ' ') btn.click();
+    });
+  });
+})();
+</script>
+</body>
+</html>
